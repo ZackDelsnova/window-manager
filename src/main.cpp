@@ -13,6 +13,14 @@ struct WindowInfo {
     LONG_PTR exStyle;
 };
 
+enum class LayoutState {
+    LeftTop,
+    RightTop,
+    LeftBottom,
+    RightBottom,
+    Center
+};
+
 void PrintStyleFlags(LONG_PTR style) {
     if (style & WS_VISIBLE) std::cout << "WS_VISIBLE ";
     if (style & WS_CHILD) std::cout << "WS_CHILD ";
@@ -34,6 +42,16 @@ void PrintExStyleFlags(LONG_PTR exStyle) {
     if (exStyle & WS_EX_TOPMOST) std::cout << "WS_EX_TOPMOST ";
     if (exStyle & WS_EX_LAYERED) std::cout << "WS_EX_LAYERED ";
     if (exStyle & WS_EX_TRANSPARENT) std::cout << "WS_EX_TRANSPARENT ";
+}
+
+void PrintHierarchy(HWND hwnd) {
+    HWND owner = GetWindow(hwnd, GW_OWNER);
+    HWND root = GetAncestor(hwnd, GA_ROOT);
+    HWND rootOwner = GetAncestor(hwnd, GA_ROOTOWNER);
+    std::cout << "Active HWND: " << hwnd << "\n";
+    std::cout << "Owner: " << owner << "\n";
+    std::cout << "Root: " << root << "\n";
+    std::cout << "RootOwner: " << rootOwner << "\n";
 }
 
 BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lparam) {
@@ -63,7 +81,85 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lparam) {
     return TRUE;
 }
 
+void ApplyRightTop(HWND hwnd, int screenW, int screenH) {
+    SetWindowPos(
+        hwnd, nullptr,
+        screenW / 2, 0,
+        screenW / 2, screenH / 2,
+        SWP_NOZORDER | SWP_NOACTIVATE
+    );
+}
+
+void ApplyRightBottom(HWND hwnd, int screenW, int screenH) {
+    SetWindowPos(
+        hwnd, nullptr,
+        screenW / 2, screenH / 2,
+        screenW / 2, screenH / 2,
+        SWP_NOZORDER | SWP_NOACTIVATE
+    );
+}
+
+void ApplyLeftTop(HWND hwnd, int screenW, int screenH) {
+    SetWindowPos(
+        hwnd, nullptr,
+        0, 0,
+        screenW / 2, screenH / 2,
+        SWP_NOZORDER | SWP_NOACTIVATE
+    );
+}
+
+void ApplyLeftBottom(HWND hwnd, int screenW, int screenH) {
+    SetWindowPos(
+        hwnd, nullptr,
+        0, screenH / 2,
+        screenW / 2, screenH / 2,
+        SWP_NOZORDER | SWP_NOACTIVATE
+    );
+}
+
+void ApplyCenter(HWND hwnd, int screenW, int screenH) {
+    int w = screenW * 0.6;
+    int h = screenH * 0.8;
+    int x = (screenW - w) / 2;
+    int y = (screenH - h) / 2;
+    SetWindowPos(
+        hwnd, nullptr,
+        x, y,
+        w, h,
+        SWP_NOZORDER | SWP_NOACTIVATE
+    );
+}
+
+void ApplyLayout(HWND hwnd, LayoutState state) {
+    int screenW = GetSystemMetrics(SM_CXSCREEN);
+    int screenH = GetSystemMetrics(SM_CYSCREEN);
+    switch (state) {
+        case LayoutState::LeftTop: {
+            ApplyLeftTop(hwnd, screenW, screenH);
+        } break;
+
+        case LayoutState::RightTop: {
+            ApplyRightTop(hwnd, screenW, screenH);
+        } break;
+
+        case LayoutState::LeftBottom: {
+            ApplyLeftBottom(hwnd, screenW, screenH);
+        } break;
+
+        case LayoutState::RightBottom: {
+            ApplyRightBottom(hwnd, screenW, screenH);
+        } break;
+
+        case LayoutState::Center: {
+            ApplyCenter(hwnd, screenW, screenH);
+        } break;
+    }
+}
+
 int main() {
+
+    LayoutState currentState = LayoutState::LeftTop;
+
     while (true) {
         system("cls");
 
@@ -71,22 +167,40 @@ int main() {
         EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&windows));
 
         HWND active = GetForegroundWindow();
+        HWND root = GetAncestor(active, GA_ROOTOWNER);
 
-        for (const auto& w : windows) {
-            if (w.hwnd == active) {
-                std::cout << "Active Window:\n";
-                std::cout << "Title: " << w.title << "\n";
-                std::cout << "HWND: " << w.hwnd << "\n";
-                std::cout << "x=" << w.rect.left
-                          << " y=" << w.rect.top
-                          << " w=" << (w.rect.right - w.rect.left)
-                          << " h=" << (w.rect.bottom - w.rect.top)
-                          << "\n\n";
+        if (root && IsWindowVisible(root)) {
+            
+            if (GetAsyncKeyState(VK_ESCAPE) & 1) {
                 break;
             }
-        }
 
-        Sleep(500);
+            if (GetAsyncKeyState(VK_F6) & 1) {
+                ApplyLayout(root, currentState);
+
+                currentState = static_cast<LayoutState>(
+                    (static_cast<int>(currentState) + 1) % 5
+                );
+            }
+
+            for (const auto& w : windows) {
+                if (w.hwnd == root) {
+                    std::cout << "Active Window:\n";
+                    std::cout << "Title: " << w.title << "\n";
+                    std::cout << "HWND: " << w.hwnd << "\n";
+                    std::cout << "x=" << w.rect.left
+                            << " y=" << w.rect.top
+                            << " w=" << (w.rect.right - w.rect.left)
+                            << " h=" << (w.rect.bottom - w.rect.top)
+                            << "\n\n";
+                    PrintStyleFlags(w.style);
+                    PrintExStyleFlags(w.exStyle);
+                    break;
+                }
+            }
+        }   
+
+        Sleep(10);
     }
 
     return 0;
