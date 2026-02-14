@@ -10,6 +10,8 @@ struct WindowInfo {
 };
 
 std::vector<WindowInfo> managedWindows;
+int gap = 8;
+float masterRatio = 0.55f;
 
 auto FindManagedWindow(HWND hwnd) {
     return std::find_if(
@@ -61,22 +63,24 @@ void ApplyMasterStackLayout() {
         SetWindowPos(
             managedWindows[0].hwnd,
             nullptr,
-            0, 0,
-            screenW, screenH,
+            gap, gap,
+            screenW - 2*gap,
+            screenH - 2*gap,
             SWP_NOZORDER | SWP_NOACTIVATE
         );
         return;
     }
 
-    int masterWidth = screenW * 0.55;
+    int masterWidth = screenW * masterRatio;
     int stackWidth = screenW - masterWidth;
 
     // master
     SetWindowPos(
         managedWindows[0].hwnd,
         nullptr,
-        0, 0,
-        masterWidth, screenH,
+        gap, gap,
+        masterWidth - 2*gap,
+        screenH - 2*gap,
         SWP_NOZORDER | SWP_NOACTIVATE
     );
 
@@ -84,6 +88,9 @@ void ApplyMasterStackLayout() {
     int stackCount = count - 1;
     int stackHeight = screenH / stackCount;
 
+    int stackX = masterWidth + gap;
+    int stackW = stackWidth - 2*gap;
+    
     for (int i = 1; i < count; i++) {
         int y = (i - 1) * stackHeight;
         int height = stackHeight;
@@ -95,8 +102,10 @@ void ApplyMasterStackLayout() {
         SetWindowPos(
             managedWindows[i].hwnd,
             nullptr,
-            masterWidth, y,
-            stackWidth, height,
+            stackX,
+            y + gap,
+            stackW,
+            height - gap,
             SWP_NOZORDER | SWP_NOACTIVATE
         );
     }
@@ -123,6 +132,7 @@ int main() {
                     }),
                 managedWindows.end()
             );
+            ApplyMasterStackLayout();
 
             if (GetAsyncKeyState(VK_F6) & 1) {
                 auto it = FindManagedWindow(root);
@@ -143,6 +153,19 @@ int main() {
                 }
 
                 ApplyMasterStackLayout();
+            }
+
+            if (GetAsyncKeyState(VK_F8) & 1) masterRatio += 0.05f;
+            if (GetAsyncKeyState(VK_F9) & 1) masterRatio -= 0.05f;
+
+            masterRatio = std::clamp(masterRatio, 0.3f, 0.7f);
+
+            if (GetAsyncKeyState(VK_F10) & 1) {
+                auto it = FindManagedWindow(root);
+                if (it != managedWindows.end() && it != managedWindows.begin()) {
+                    std::iter_swap(managedWindows.begin(), it);
+                    ApplyMasterStackLayout();
+                }
             }
         }   
         Sleep(10);
