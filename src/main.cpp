@@ -4,14 +4,7 @@
 #include <iostream>
 #include <string>
 #include <vector>
-
-struct WindowInfo {
-    HWND hwnd;
-    std::string title;
-    RECT rect;
-    LONG_PTR style;
-    LONG_PTR exStyle;
-};
+#include <algorithm>
 
 enum class LayoutState {
     LeftTop,
@@ -21,6 +14,28 @@ enum class LayoutState {
     Center
 };
 
+struct WindowInfo {
+    HWND hwnd;
+    std::string title;
+    RECT rect;
+    // LONG_PTR style;
+    // LONG_PTR exStyle;
+    LayoutState state;
+};
+
+std::vector<WindowInfo> managedWindows;
+
+auto FindManagedWindow(HWND hwnd) {
+    return std::find_if(
+        managedWindows.begin(),
+        managedWindows.end(),
+        [hwnd](const WindowInfo& w) {
+            return w.hwnd == hwnd;
+        }
+    );
+}
+
+/*
 void PrintStyleFlags(LONG_PTR style) {
     if (style & WS_VISIBLE) std::cout << "WS_VISIBLE ";
     if (style & WS_CHILD) std::cout << "WS_CHILD ";
@@ -80,7 +95,7 @@ BOOL CALLBACK EnumWindowsProc(HWND hwnd, LPARAM lparam) {
 
     return TRUE;
 }
-
+*/
 void ApplyRightTop(HWND hwnd, int screenW, int screenH) {
     SetWindowPos(
         hwnd, nullptr,
@@ -156,15 +171,30 @@ void ApplyLayout(HWND hwnd, LayoutState state) {
     }
 }
 
+bool IsLayoutOccupied(LayoutState state, HWND exclude = nullptr) {
+    for (const auto& w : managedWindows) {
+        if (w.state == state && w.hwnd != exclude) return true;
+    }
+    return false;
+}
+
+LayoutState GetNextFreeSlot(LayoutState start, HWND exclude = nullptr) {
+    int startIndex = static_cast<int>(start);
+    for (int i = 0; i < 5; ++i) {
+        LayoutState candidate = static_cast<LayoutState>((startIndex + i) % 5);
+
+        if (!IsLayoutOccupied(candidate, exclude)) return candidate;
+    }
+
+    return start;
+}
+
 int main() {
 
     LayoutState currentState = LayoutState::LeftTop;
 
     while (true) {
         system("cls");
-
-        std::vector<WindowInfo> windows;
-        EnumWindows(EnumWindowsProc, reinterpret_cast<LPARAM>(&windows));
 
         HWND active = GetForegroundWindow();
         HWND root = GetAncestor(active, GA_ROOTOWNER);
@@ -176,13 +206,40 @@ int main() {
             }
 
             if (GetAsyncKeyState(VK_F6) & 1) {
-                ApplyLayout(root, currentState);
+                auto it = FindManagedWindow(root);
 
-                currentState = static_cast<LayoutState>(
-                    (static_cast<int>(currentState) + 1) % 5
+                managedWindows.erase(
+                    std::remove_if(
+                        managedWindows.begin(),
+                        managedWindows.end(),
+                        [](const WindowInfo& w)
+                        {
+                            return !IsWindow(w.hwnd);
+                        }),
+                    managedWindows.end()
                 );
+
+                if (it == managedWindows.end()) {
+                    LayoutState freeSlot = GetNextFreeSlot(LayoutState::LeftTop);
+
+                    WindowInfo info{};
+                    info.hwnd = root;
+                    info.state = freeSlot;
+
+                    managedWindows.push_back(info);
+                } else {
+                    LayoutState next = static_cast<LayoutState>((static_cast<int>(it->state) + 1) % 5);
+                    next = GetNextFreeSlot(next, root);
+                    it->state = next;
+                }
+
+                for (auto& w : managedWindows) {
+                    ApplyLayout(w.hwnd, w.state);
+                }
+
             }
 
+            /*
             for (const auto& w : windows) {
                 if (w.hwnd == root) {
                     std::cout << "Active Window:\n";
@@ -198,6 +255,7 @@ int main() {
                     break;
                 }
             }
+            */
         }   
 
         Sleep(10);
