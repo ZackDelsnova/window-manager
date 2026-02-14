@@ -5,17 +5,8 @@
 #include <vector>
 #include <algorithm>
 
-enum class LayoutState {
-    LeftTop,
-    RightTop,
-    LeftBottom,
-    RightBottom,
-    Center
-};
-
 struct WindowInfo {
     HWND hwnd;
-    LayoutState state;
 };
 
 std::vector<WindowInfo> managedWindows;
@@ -28,99 +19,6 @@ auto FindManagedWindow(HWND hwnd) {
             return w.hwnd == hwnd;
         }
     );
-}
-
-void ApplyRightTop(HWND hwnd, int screenW, int screenH) {
-    SetWindowPos(
-        hwnd, nullptr,
-        screenW / 2, 0,
-        screenW / 2, screenH / 2,
-        SWP_NOZORDER | SWP_NOACTIVATE
-    );
-}
-
-void ApplyRightBottom(HWND hwnd, int screenW, int screenH) {
-    SetWindowPos(
-        hwnd, nullptr,
-        screenW / 2, screenH / 2,
-        screenW / 2, screenH / 2,
-        SWP_NOZORDER | SWP_NOACTIVATE
-    );
-}
-
-void ApplyLeftTop(HWND hwnd, int screenW, int screenH) {
-    SetWindowPos(
-        hwnd, nullptr,
-        0, 0,
-        screenW / 2, screenH / 2,
-        SWP_NOZORDER | SWP_NOACTIVATE
-    );
-}
-
-void ApplyLeftBottom(HWND hwnd, int screenW, int screenH) {
-    SetWindowPos(
-        hwnd, nullptr,
-        0, screenH / 2,
-        screenW / 2, screenH / 2,
-        SWP_NOZORDER | SWP_NOACTIVATE
-    );
-}
-
-void ApplyCenter(HWND hwnd, int screenW, int screenH) {
-    int w = screenW * 0.6;
-    int h = screenH * 0.8;
-    int x = (screenW - w) / 2;
-    int y = (screenH - h) / 2;
-    SetWindowPos(
-        hwnd, nullptr,
-        x, y,
-        w, h,
-        SWP_NOZORDER | SWP_NOACTIVATE
-    );
-}
-
-void ApplyLayout(HWND hwnd, LayoutState state) {
-    int screenW = GetSystemMetrics(SM_CXSCREEN);
-    int screenH = GetSystemMetrics(SM_CYSCREEN);
-    switch (state) {
-        case LayoutState::LeftTop: {
-            ApplyLeftTop(hwnd, screenW, screenH);
-        } break;
-
-        case LayoutState::RightTop: {
-            ApplyRightTop(hwnd, screenW, screenH);
-        } break;
-
-        case LayoutState::LeftBottom: {
-            ApplyLeftBottom(hwnd, screenW, screenH);
-        } break;
-
-        case LayoutState::RightBottom: {
-            ApplyRightBottom(hwnd, screenW, screenH);
-        } break;
-
-        case LayoutState::Center: {
-            ApplyCenter(hwnd, screenW, screenH);
-        } break;
-    }
-}
-
-bool IsLayoutOccupied(LayoutState state, HWND exclude = nullptr) {
-    for (const auto& w : managedWindows) {
-        if (w.state == state && w.hwnd != exclude) return true;
-    }
-    return false;
-}
-
-LayoutState GetNextFreeSlot(LayoutState start, HWND exclude = nullptr) {
-    int startIndex = static_cast<int>(start);
-    for (int i = 0; i < 5; ++i) {
-        LayoutState candidate = static_cast<LayoutState>((startIndex + i) % 5);
-
-        if (!IsLayoutOccupied(candidate, exclude)) return candidate;
-    }
-
-    return start;
 }
 
 bool IsManageableWindow(HWND hwnd) {
@@ -146,90 +44,6 @@ bool IsManageableWindow(HWND hwnd) {
     if (cloaked) return false;
 
     return true;
-}
-
-void ApplyGridLayout()
-{
-    int count = managedWindows.size();
-    if (count == 0) return;
-
-    int screenW = GetSystemMetrics(SM_CXSCREEN);
-    int screenH = GetSystemMetrics(SM_CYSCREEN);
-
-    int cols = (int)std::ceil(std::sqrt(count));
-    int rows = (int)std::ceil((float)count / cols);
-
-    int cellW = screenW / cols;
-    int cellH = screenH / rows;
-
-    for (int i = 0; i < count; ++i)
-    {
-        int row = i / cols;
-        int col = i % cols;
-
-        int x = col * cellW;
-        int y = row * cellH;
-
-        SetWindowPos(
-            managedWindows[i].hwnd,
-            nullptr,
-            x, y,
-            cellW, cellH,
-            SWP_NOZORDER | SWP_NOACTIVATE
-        );
-    }
-}
-
-void ApplyAdaptiveLayout() {
-    int count = managedWindows.size();
-    if (count == 0) return;
-
-    int screenW = GetSystemMetrics(SM_CXSCREEN);
-    int screenH = GetSystemMetrics(SM_CYSCREEN);
-
-    int rows = 1;
-    int cols = 1;
-    
-    if (count == 1)
-    {
-        rows = 1; cols = 1;
-    }
-    else if (count == 2)
-    {
-        rows = 1; cols = 2;
-    }
-    else if (count == 3)
-    {
-        rows = 3; cols = 1;
-    }
-    else if (count == 4)
-    {
-        rows = 2; cols = 2;
-    }
-    else
-    {
-        cols = (int)std::ceil(std::sqrt(count));
-        rows = (int)std::ceil((float)count / cols);
-    }
-
-    int cellW = screenW / cols;
-    int cellH = screenH / rows;
-
-    for (int i = 0; i < count; ++i) {
-        int row = i / cols;
-        int col = i % cols;
-
-        int x = col * cellW;
-        int y = row * cellW;
-
-        SetWindowPos(
-            managedWindows[i].hwnd,
-            nullptr,
-            x, y,
-            cellW, cellH,
-            SWP_NOZORDER | SWP_NOACTIVATE
-        );
-    }
 }
 
 void ApplyMasterStackLayout() {
@@ -290,7 +104,6 @@ void ApplyMasterStackLayout() {
 
 int main() {
     while (true) {
-
         HWND active = GetForegroundWindow();
         HWND root = GetAncestor(active, GA_ROOTOWNER);
 
@@ -331,11 +144,8 @@ int main() {
 
                 ApplyMasterStackLayout();
             }
-
         }   
-
         Sleep(10);
     }
-
     return 0;
 }
